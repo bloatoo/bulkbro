@@ -1,5 +1,9 @@
 use rand::Rng;
-use rwcord::{async_trait, discord::Message, Client, Context, Handler};
+use rwcord::{
+    async_trait,
+    discord::{Embed, Message},
+    Client, Context, Handler,
+};
 use serde_json::Value;
 
 use tokio_postgres::{connect, Client as PSQClient, NoTls};
@@ -20,29 +24,55 @@ impl Handler<State> for EventHandler {
             let cmd = args.remove(0);
 
             match cmd {
-                "ping" => {
-                    msg.reply(ctx.http(), "pong").await.unwrap();
+                "set" => {
+                    let state = ctx.state().read().await;
+
+                    match args[0] {
+                        "squat" => {
+                            let rows = state
+                                .db
+                                .query(
+                                    "SELECT max_squat FROM users WHERE id = $1",
+                                    &[msg.author().id()],
+                                )
+                                .await
+                                .unwrap();
+
+                            let squat = args[1].parse::<i32>().unwrap();
+
+                            if let Some(_) = rows.get(0) {
+                                state
+                                    .db
+                                    .query(
+                                        "UPDATE users SET max_squat = $1 WHERE id = $2",
+                                        &[&squat, msg.author().id()],
+                                    )
+                                    .await
+                                    .unwrap();
+                            } else {
+                                state
+                                    .db
+                                    .query(
+                                        "INSERT INTO users(id, max_squat) VALUES ($1, $2)",
+                                        &[msg.author().id(), &squat],
+                                    )
+                                    .await
+                                    .unwrap();
+                            }
+
+                            let embed = Embed::new()
+                                .title(":white_check_mark: Success!")
+                                .description(format!("Your squat PR has been set to {} kg.", squat))
+                                .color("#81a1c1");
+
+                            msg.reply(ctx.http(), embed).await.unwrap();
+                        }
+                        _ => (),
+                    }
                 }
                 _ => (),
             }
         }
-        /*if msg.content() == "!copypasta" {
-            let other_res = reqwest::get("https://www.reddit.com/r/amitheasshole/top/.json?sort=top&t=day&showmedia=false&mediaonly=false&is_self=true&limit=100").await.unwrap().text().await.unwrap();
-
-            let json: Value = serde_json::from_str(&other_res[..]).unwrap();
-
-            let quote = json["data"]["children"][rand::thread_rng().gen_range(0..100) as usize]
-                ["data"]["selftext"]
-                .as_str()
-                .unwrap();
-
-            if quote.len() > 2000 {
-                msg.reply(ctx.http(), &quote[..1999]).await.unwrap();
-                msg.reply(ctx.http(), &quote[1999..]).await.unwrap();
-            } else {
-                msg.reply(ctx.http(), quote).await.unwrap();
-            }
-        }*/
     }
 }
 
