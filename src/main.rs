@@ -11,6 +11,9 @@ use serde_json::Value;
 
 use tokio_postgres::{connect, Client as PSQClient, NoTls};
 
+mod command;
+use command::Command;
+
 struct EventHandler;
 
 struct State {
@@ -57,6 +60,7 @@ impl Handler<State> for EventHandler {
                     }
                     _ => (),
                 },
+
                 "set" => {
                     let state = ctx.state().read().await;
 
