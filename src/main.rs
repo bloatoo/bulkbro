@@ -1,4 +1,3 @@
-use rand::Rng;
 use rwcord::{
     async_trait,
     discord::{
@@ -9,6 +8,7 @@ use rwcord::{
 };
 use serde_json::Value;
 
+use rand::Rng;
 use tokio_postgres::{connect, Client as PSQClient, NoTls};
 
 mod command;
@@ -30,6 +30,39 @@ impl Handler<State> for EventHandler {
             let cmd = args.remove(0);
 
             match cmd {
+                "music" => {
+                    let state = ctx.state().read().await;
+
+                    match args[0] {
+                        "add" => {
+                            let url = args[1];
+
+                            state
+                                .db
+                                .query("INSERT into songs(url) VALUES ($1)", &[&url])
+                                .await
+                                .unwrap();
+
+                            msg.reply(ctx.http(), "Success").await.unwrap();
+                        }
+
+                        "random" => {
+                            let rows = state.db.query("SELECT url FROM songs;", &[]).await.unwrap();
+
+                            let rand = if rows.len() < 2 {
+                                0
+                            } else {
+                                rand::thread_rng().gen_range(0..rows.len())
+                            };
+
+                            let url: String = rows[rand].get(0);
+
+                            msg.reply(ctx.http(), url).await.unwrap();
+                        }
+
+                        _ => (),
+                    }
+                }
                 "workouts" => match args[0] {
                     "view" => {
                         let state = ctx.state().read().await;
