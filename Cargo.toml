@@ -10,6 +10,7 @@ rand = "0.8.4"
 serde_json = "1.0.75"
 reqwest = "0.11.9"
 tokio-postgres = "0.7.5"
+url = "2.2.2"
 
 [dependencies.tokio]
 version = "1.15.0"

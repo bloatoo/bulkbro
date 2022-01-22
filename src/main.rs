@@ -14,6 +14,15 @@ use tokio_postgres::{connect, Client as PSQClient, NoTls};
 mod command;
 use command::Command;
 
+use url::Url;
+
+const VALID_HOSTS: &[&'static str] = &[
+    "youtube.com",
+    "www.youtube.com",
+    "youtu.be",
+    "m.youtube.com",
+];
+
 struct EventHandler;
 
 struct State {
@@ -29,25 +38,116 @@ impl Handler<State> for EventHandler {
             let mut args: Vec<&str> = content[3..].split(" ").collect();
             let cmd = args.remove(0);
 
+            let mut final_url = String::new();
+
             match cmd {
                 "music" => {
                     let state = ctx.state().read().await;
 
                     match args[0] {
                         "add" => {
-                            let url = args[1];
+                            let url = match Url::parse(args[1]) {
+                                Ok(url) => url,
+                                Err(_) => {
+                                    msg.reply(ctx.http(), "Invalid URL.").await.unwrap();
+                                    return;
+                                }
+                            };
 
-                            state
+                            let mut valid = false;
+
+                            for h in VALID_HOSTS {
+                                if url.host_str() == Some(h) {
+                                    valid = true;
+                                }
+                            }
+
+                            if url.scheme() != "https" && url.scheme() != "http" {
+                                valid = false;
+                            }
+
+                            match url.host_str() {
+                                Some("youtube.com")
+                                | Some("www.youtube.com")
+                                | Some("m.youtube.com") => {
+                                    if url.path() != "/watch" {
+                                        valid = false;
+                                    }
+
+                                    match url.query() {
+                                        Some(q) => {
+                                            let id_start = q.find("v=").unwrap();
+                                            let t_str = &q[id_start + 2..];
+                                            let mut v_str = String::new();
+
+                                            for c in t_str.chars() {
+                                                if c.is_ascii_alphabetic() {
+                                                    v_str.push(c);
+                                                } else {
+                                                    break;
+                                                }
+                                            }
+
+                                            final_url =
+                                                format!("https://youtube.com/watch?v={}", v_str);
+                                        }
+
+                                        None => {
+                                            valid = false;
+                                        }
+                                    }
+                                }
+
+                                Some("youtu.be") => {
+                                    let mut id = url.path().to_string();
+                                    id.remove(0);
+                                    final_url = format!("https://youtube.com/watch?v={}", id);
+                                }
+                                Some(&_) => {}
+                                None => {
+                                    valid = false;
+                                }
+                            }
+
+                            let res = reqwest::get(format!(
+                                "https://www.youtube.com/oembed?format=json&url={}",
+                                url
+                            ))
+                            .await
+                            .unwrap();
+
+                            if res.status() != 200 {
+                                valid = false;
+                            } else {
+                                valid = true;
+                            }
+
+                            if !valid {
+                                msg.reply(ctx.http(), "Invalid URL. Must be a YouTube link.")
+                                    .await
+                                    .unwrap();
+                                return;
+                            }
+
+                            if let Err(_) = state
                                 .db
-                                .query("INSERT into songs(url) VALUES ($1)", &[&url])
+                                .query("INSERT into songs(url) VALUES ($1)", &[&final_url])
                                 .await
-                                .unwrap();
-
-                            msg.reply(ctx.http(), "Success").await.unwrap();
+                            {
+                                msg.reply(ctx.http(), "Error when adding song to the database. Maybe it already exists there?").await.unwrap();
+                            } else {
+                                msg.reply(ctx.http(), "Success").await.unwrap();
+                            }
                         }
 
                         "random" => {
                             let rows = state.db.query("SELECT url FROM songs;", &[]).await.unwrap();
+
+                            if rows.len() == 0 {
+                                msg.reply(ctx.http(), "No songs in the database.")
+                                    .await
+                                    .unwrap();
+                            }
 
                             let rand = if rows.len() < 2 {
                                 0
