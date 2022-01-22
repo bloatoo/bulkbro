@@ -81,7 +81,7 @@ impl Handler<State> for EventHandler {
                                             let mut v_str = String::new();
 
                                             for c in t_str.chars() {
-                                                if c.is_ascii_alphabetic() {
+                                                if c.is_ascii_alphabetic() || c.is_ascii_digit() {
                                                     v_str.push(c);
                                                 } else {
                                                     break;
