@@ -14,18 +14,13 @@ use tokio_postgres::{connect, Client as PSQClient, NoTls};
 mod command;
 use command::Command;
 
-use url::Url;
+use command::WorkoutsCommand;
 
-const VALID_HOSTS: &[&'static str] = &[
-    "youtube.com",
-    "www.youtube.com",
-    "youtu.be",
-    "m.youtube.com",
-];
+use url::Url;
 
 struct EventHandler;
 
-struct State {
+pub struct State {
     db: PSQClient,
 }
 
@@ -38,14 +33,18 @@ impl Handler<State> for EventHandler {
             let mut args: Vec<&str> = content[3..].split(" ").collect();
             let cmd = args.remove(0);
 
-            let mut final_url = String::new();
-
             match cmd {
+                "workouts" => {
+                    WorkoutsCommand::exec(ctx, &msg, args).await.unwrap();
+                }
+
                 "music" => {
                     let state = ctx.state().read().await;
 
                     match args[0] {
                         "add" => {
+                            let mut final_url = String::new();
+
                             let url = match Url::parse(args[1]) {
                                 Ok(url) => url,
                                 Err(_) => {
@@ -55,12 +54,6 @@ impl Handler<State> for EventHandler {
                             };
 
                             let mut valid = false;
-
-                            for h in VALID_HOSTS {
-                                if url.host_str() == Some(h) {
-                                    valid = true;
-                                }
-                            }
 
                             if url.scheme() != "https" && url.scheme() != "http" {
                                 valid = false;
@@ -73,7 +66,6 @@ impl Handler<State> for EventHandler {
                                     if url.path() != "/watch" {
                                         valid = false;
                                     }
-
                                     match url.query() {
                                         Some(q) => {
                                             let id_start = q.find("v=").unwrap();
@@ -163,37 +155,6 @@ impl Handler<State> for EventHandler {
                         _ => (),
                     }
                 }
-                "workouts" => match args[0] {
-                    "view" => {
-                        let state = ctx.state().read().await;
-                        let rows = state
-                            .db
-                            .query(
-                                "SELECT title FROM workouts WHERE author_id = $1",
-                                &[msg.author().id()],
-                            )
-                            .await
-                            .unwrap();
-
-                        let mut embed = Embed::new().title("Your Workouts").color("#bf616a");
-
-                        for row in rows {
-                            let workout_title: String = row.get(0);
-
-                            let field = EmbedField {
-                                name: workout_title,
-                                value: "Some text".into(),
-                                inline: true,
-                            };
-
-                            embed = embed.add_field(field);
-                        }
-
-                        msg.reply(ctx.http(), embed).await.unwrap();
-                    }
-                    _ => (),
-                },
-
                 "set" => {
                     let state = ctx.state().read().await;
 
