@@ -1,7 +1,7 @@
 use rwcord::{
     async_trait,
     discord::{
-        embed::{Embed, EmbedField},
+        embed::{Embed, EmbedField, EmbedImage},
         Message,
     },
     Client, Context, Handler,
@@ -36,18 +36,37 @@ impl Handler<State> for EventHandler {
             let cmd = args.remove(0);
 
             match cmd {
-                "exercises" => match args[0] {
-                    "query" => {
-                        let state = ctx.state().read().await;
+                "exercises" => match args.get(0) {
+                    None => {
+                        let embed = Embed::new()
+                            .title("Exercise commands")
+                            .color("#c8ccd4")
+                            .add_field(EmbedField {
+                                name: "`bb exercise query`".into(),
+                                value: "Query information about exercises (via muscle group (ex: `bb exercise query triceps`) or via exercise name (ex: `bb exercise query diamond push up`))".into(),
+                                inline: false
+                            })
+                            .add_field(EmbedField {
+                                name: "`bb exercise view`".into(),
+                                value: "View detailed information about an exercise (ex: `bb exercise view diamond push up`)".into(),
+                                inline: false
+                            });
 
-                        let mut embed = Embed::new()
-                            .title("Exercises query results")
-                            .color("#c8ccd4");
+                        msg.reply(ctx.http(), embed).await.unwrap();
+                    }
 
-                        let query = args[1..].join(" ").to_lowercase();
+                    Some(x) => match *x {
+                        "query" => {
+                            let state = ctx.state().read().await;
 
-                        if MUSCLE_GROUPS.contains(&query.trim()) {
-                            let rows = state
+                            let mut embed = Embed::new()
+                                .title("Exercises query results")
+                                .color("#c8ccd4");
+
+                            let query = args[1..].join(" ").to_lowercase();
+
+                            if MUSCLE_GROUPS.contains(&query.trim()) {
+                                let rows = state
                                 .db
                                 .query(
                                     "SELECT name, description FROM exercises WHERE muscles_worked[1] = $1",
@@ -56,44 +75,80 @@ impl Handler<State> for EventHandler {
                                 .await
                                 .unwrap();
 
-                            for r in rows {
-                                let name: String = r.get(0);
-                                let description: String = r.get(1);
+                                for r in rows {
+                                    let name: String = r.get(0);
+                                    let description: String = r.get(1);
 
-                                embed = embed.add_field(EmbedField {
-                                    name,
-                                    value: description,
-                                    inline: false,
-                                });
+                                    embed = embed.add_field(EmbedField {
+                                        name,
+                                        value: description,
+                                        inline: false,
+                                    });
+                                }
+                            } else {
+                                let rows = state.db.query("SELECT name, muscles_worked, description FROM exercises WHERE LOWER(name) LIKE '%' || $1 || '%';", &[&query]).await.unwrap();
+
+                                for r in rows {
+                                    let name: String = r.get(0);
+                                    let description: String = r.get(2);
+                                    let mut muscles_worked_string = String::new();
+
+                                    let muscles_worked_vec: Vec<String> = r.get(1);
+
+                                    muscles_worked_vec.iter().for_each(|x| {
+                                        muscles_worked_string.push_str(&format!("{}, ", x))
+                                    });
+
+                                    muscles_worked_string.pop();
+                                    muscles_worked_string.pop();
+
+                                    embed = embed.add_field(EmbedField {
+                                        name: format!("{} | {}", name, muscles_worked_string),
+                                        value: description,
+                                        inline: false,
+                                    });
+                                }
                             }
-                        } else {
-                            let rows = state.db.query("SELECT name, muscles_worked, description FROM exercises WHERE LOWER(name) LIKE '%' || $1 || '%';", &[&query]).await.unwrap();
 
-                            for r in rows {
-                                let name: String = r.get(0);
-                                let description: String = r.get(2);
-                                let mut muscles_worked_string = String::new();
-
-                                let muscles_worked_vec: Vec<String> = r.get(1);
-
-                                muscles_worked_vec.iter().for_each(|x| {
-                                    muscles_worked_string.push_str(&format!("{}, ", x))
-                                });
-
-                                muscles_worked_string.pop();
-                                muscles_worked_string.pop();
-
-                                embed = embed.add_field(EmbedField {
-                                    name: format!("{} | {}", name, muscles_worked_string),
-                                    value: description,
-                                    inline: false,
-                                });
-                            }
+                            msg.reply(ctx.http(), embed).await.unwrap();
                         }
 
-                        msg.reply(ctx.http(), embed).await.unwrap();
-                    }
-                    _ => (),
+                        "view" => {
+                            let state = ctx.state().read().await;
+
+                            let query = args[1..].join(" ").to_lowercase();
+                            let rows = state.db.query("SELECT name, muscles_worked, description, image_url FROM exercises WHERE LOWER(name) LIKE '%' || $1 || '%';", &[&query]).await.unwrap();
+
+                            if rows.len() == 0 {
+                                return;
+                            }
+
+                            let r = &rows[0];
+
+                            let name: String = r.get(0);
+                            let muscles_worked: Vec<String> = r.get(1);
+                            let description: String = r.get(2);
+                            let image_url: String = r.get(3);
+
+                            let mut final_desc = format!(
+                                "{}\nMuscles worked: {}.",
+                                description,
+                                muscles_worked.join(", ")
+                            );
+
+                            let embed = Embed::new()
+                                .title(name)
+                                .color("#c8ccd4")
+                                .description(final_desc)
+                                .image(EmbedImage {
+                                    url: image_url,
+                                    ..Default::default()
+                                });
+
+                            msg.reply(ctx.http(), embed).await.unwrap();
+                        }
+                        _ => (),
+                    },
                 },
                 "workouts" => {
                     WorkoutsCommand::exec(ctx, &msg, args).await.unwrap();
