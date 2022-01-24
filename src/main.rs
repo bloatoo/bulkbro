@@ -20,6 +20,8 @@ use url::Url;
 
 struct EventHandler;
 
+const MUSCLE_GROUPS: &[&'static str] = &["triceps", "biceps", "chest", "back", "legs", "calves"];
+
 pub struct State {
     db: PSQClient,
 }
@@ -34,6 +36,65 @@ impl Handler<State> for EventHandler {
             let cmd = args.remove(0);
 
             match cmd {
+                "exercises" => match args[0] {
+                    "query" => {
+                        let state = ctx.state().read().await;
+
+                        let mut embed = Embed::new()
+                            .title("Exercises query results")
+                            .color("#c8ccd4");
+
+                        let query = args[1..].join(" ").to_lowercase();
+
+                        if MUSCLE_GROUPS.contains(&query.trim()) {
+                            let rows = state
+                                .db
+                                .query(
+                                    "SELECT name, description FROM exercises WHERE muscles_worked[1] = $1",
+                                    &[&args[1]],
+                                )
+                                .await
+                                .unwrap();
+
+                            for r in rows {
+                                let name: String = r.get(0);
+                                let description: String = r.get(1);
+
+                                embed = embed.add_field(EmbedField {
+                                    name,
+                                    value: description,
+                                    inline: false,
+                                });
+                            }
+                        } else {
+                            let rows = state.db.query("SELECT name, muscles_worked, description FROM exercises WHERE LOWER(name) LIKE '%' || $1 || '%';", &[&query]).await.unwrap();
+
+                            for r in rows {
+                                let name: String = r.get(0);
+                                let description: String = r.get(2);
+                                let mut muscles_worked_string = String::new();
+
+                                let muscles_worked_vec: Vec<String> = r.get(1);
+
+                                muscles_worked_vec.iter().for_each(|x| {
+                                    muscles_worked_string.push_str(&format!("{}, ", x))
+                                });
+
+                                muscles_worked_string.pop();
+                                muscles_worked_string.pop();
+
+                                embed = embed.add_field(EmbedField {
+                                    name: format!("{} | {}", name, muscles_worked_string),
+                                    value: description,
+                                    inline: false,
+                                });
+                            }
+                        }
+
+                        msg.reply(ctx.http(), embed).await.unwrap();
+                    }
+                    _ => (),
+                },
                 "workouts" => {
                     WorkoutsCommand::exec(ctx, &msg, args).await.unwrap();
                 }
@@ -194,7 +255,7 @@ impl Handler<State> for EventHandler {
                             let embed = Embed::new()
                                 .title(":white_check_mark: Success!")
                                 .description(format!("Your squat PR has been set to {} kg.", squat))
-                                .color("#81a1c1");
+                                .color("#c8ccd4");
 
                             msg.reply(ctx.http(), embed).await.unwrap();
                         }

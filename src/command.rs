@@ -35,7 +35,10 @@ impl Command<State> for WorkoutsCommand {
                     .await
                     .unwrap();
 
-                let mut embed = Embed::new().title("Your Workouts").color("#bf616a");
+                let mut embed = Embed::new()
+                    .title("Your Workouts")
+                    .description("")
+                    .color("#c8ccd4");
 
                 for row in rows {
                     let workout_title: String = row.get(0);
