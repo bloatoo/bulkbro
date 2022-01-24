@@ -20,7 +20,9 @@ use url::Url;
 
 struct EventHandler;
 
-const MUSCLE_GROUPS: &[&'static str] = &["triceps", "biceps", "chest", "back", "legs", "calves"];
+const MUSCLE_GROUPS: &[&'static str] = &[
+    "triceps", "biceps", "chest", "back", "legs", "calves", "abs",
+];
 
 pub struct State {
     db: PSQClient,
