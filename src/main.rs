@@ -38,7 +38,7 @@ impl Handler<State> for EventHandler {
             let cmd = args.remove(0);
 
             match cmd {
-                "exercises" => match args.get(0) {
+                "exercise" => match args.get(0) {
                     None => {
                         let embed = Embed::new()
                             .title("Exercise commands")
@@ -68,21 +68,34 @@ impl Handler<State> for EventHandler {
                             let query = args[1..].join(" ").to_lowercase();
 
                             if MUSCLE_GROUPS.contains(&query.trim()) {
-                                let rows = state
+                                let mut rows = state
                                 .db
                                 .query(
-                                    "SELECT name, description FROM exercises WHERE muscles_worked[1] = $1",
+                                    "SELECT name, muscles_worked, description FROM exercises WHERE $1 = ANY(muscles_worked)",
                                     &[&args[1]],
                                 )
                                 .await
                                 .unwrap();
 
+                                rows.sort_by(|a, b| {
+                                    let muscles_worked_a: Vec<&str> = a.get(1);
+                                    let a_idx =
+                                        muscles_worked_a.iter().position(|x| *x == &query).unwrap();
+
+                                    let muscles_worked_b: Vec<&str> = b.get(1);
+                                    let b_idx =
+                                        muscles_worked_b.iter().position(|x| *x == &query).unwrap();
+
+                                    a_idx.cmp(&b_idx)
+                                });
+
                                 for r in rows {
-                                    let name: String = r.get(0);
-                                    let description: String = r.get(1);
+                                    let mut name: String = r.get(0);
+                                    let muscles_worked: Vec<&str> = r.get(1);
+                                    let description: String = r.get(2);
 
                                     embed = embed.add_field(EmbedField {
-                                        name,
+                                        name: format!("{} | {}", name, muscles_worked.join(" > ")),
                                         value: description,
                                         inline: false,
                                     });
@@ -95,17 +108,10 @@ impl Handler<State> for EventHandler {
                                     let description: String = r.get(2);
                                     let mut muscles_worked_string = String::new();
 
-                                    let muscles_worked_vec: Vec<String> = r.get(1);
-
-                                    muscles_worked_vec.iter().for_each(|x| {
-                                        muscles_worked_string.push_str(&format!("{}, ", x))
-                                    });
-
-                                    muscles_worked_string.pop();
-                                    muscles_worked_string.pop();
+                                    let muscles_worked: Vec<&str> = r.get(1);
 
                                     embed = embed.add_field(EmbedField {
-                                        name: format!("{} | {}", name, muscles_worked_string),
+                                        name: format!("{} | {}", name, muscles_worked.join(", ")),
                                         value: description,
                                         inline: false,
                                     });
