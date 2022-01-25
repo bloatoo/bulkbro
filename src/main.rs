@@ -21,7 +21,14 @@ use url::Url;
 struct EventHandler;
 
 const MUSCLE_GROUPS: &[&'static str] = &[
-    "triceps", "biceps", "chest", "back", "legs", "calves", "abs",
+    "triceps",
+    "biceps",
+    "chest",
+    "back",
+    "legs",
+    "calves",
+    "abs",
+    "shoulders",
 ];
 
 pub struct State {
